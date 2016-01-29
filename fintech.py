@@ -6,7 +6,6 @@ Created on Fri Jan 15 10:46:47 2016
 """
 
 import nltk
-import re
 from nltk.tokenize import word_tokenize
 #from nltk.book import *
 from pymongo import MongoClient
