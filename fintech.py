@@ -25,7 +25,14 @@ import matplotlib.pyplot as plt
 import math
 from scipy.special import expit
 from nltk import timex
+from nltk.tag.stanford import StanfordPOSTagger
+from nltk.tag import StanfordNERTagger
 
+st = StanfordPOSTagger('C:\\Users\\anshmania\\AppData\\Roaming\\nltk_data\\taggers\\stanford-postagger-full-2014-08-27\\models\\english-bidirectional-distsim.tagger','C:\Users\\anshmania\\AppData\\Roaming\\nltk_data\\taggers\\stanford-postagger-full-2014-08-27\\stanford-postagger.jar')
+
+ne7=StanfordNERTagger('C:\\Users\\anshmania\\AppData\\Roaming\\nltk_data\\taggers\\stanford-ner-2015-04-20\\classifiers\\english.muc.7class.distsim.crf.ser.gz','C:\Users\\anshmania\\AppData\\Roaming\\nltk_data\\taggers\\stanford-ner-2015-04-20\\stanford-ner.jar')
+
+ne4=StanfordNERTagger('C:\\Users\\anshmania\\AppData\\Roaming\\nltk_data\\taggers\\stanford-ner-2015-04-20\\classifiers\\english.conll.4class.distsim.crf.ser.gz','C:\Users\\anshmania\\AppData\\Roaming\\nltk_data\\taggers\\stanford-ner-2015-04-20\\stanford-ner.jar')
 #################################################################
 ################### Mongo DB creation ###########################
 #################################################################
@@ -84,7 +91,7 @@ def chunkedNNP(conversationId):
     for data in conversation:
         text=' '.join(data['text'])
         token_text=nltk.word_tokenize(text)
-        tagged_text=nltk.pos_tag(token_text)
+        tagged_text=st(token_text)
         grammar="NP: {<DT><JJ><NN>}"
         #Loca="LOCATION: {<IN>?<JJ>*<NN>}"
         parser=nltk.RegexpParser(grammar)
@@ -100,15 +107,31 @@ def chunker(conversationId):
         tagged_text=nltk.pos_tag(token_text)
         return nltk.ne_chunk(tagged_text)
 
+def stanfordChunker(conversationId):
+    conversation= client.test.chatSessions.find({'conversationId':conversationId})  #cursor object
+    for data in conversation:
+        text=' '.join(data['text'])
+        token_text=nltk.word_tokenize(text)
+        #tagged_text=nltk.pos_tag(token_text)
+        return ne4.tag(token_text)
+
 # Extract named entities from unstructured text
 labelss=defaultdict(list)
 leafs=[]
-def namedEntities(conversationId):
+def namedEntitiesNEChunk(conversationId):
     for item in chunker(conversationId):
         if isinstance(item,nltk.tree.Tree):
             for tuples in item.leaves():
                 labelss.setdefault(item.label(),[]).append(tuples[0])
     return labelss
+
+labelsStanford=defaultdict(list)
+def namedEntitiesStanfordChunk(conversationId):
+    for item in stanfordChunker(conversationId):
+        word,tag = item
+        if tag != 'O':
+            labelsStanford.setdefault(tag,[]).append(word)
+    return labelsStanford
 
 # Time-Date information.
 timeData=defaultdict(list)
@@ -274,7 +297,7 @@ def featureExtractor(conversationId):
 ## Declare some variables and Prepare for a plot
 #x=[]
 #y=[]
-#for i in range(5):
+#for i in range(20):
 ##,data in enumerate(client.test.chatSessions.find()):
 #    x.append(featureExtractor(i+1))
 #    y.append(sentimentAnalyser(i+1)[0]['compound'])
