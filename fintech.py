@@ -22,7 +22,7 @@ from nltk.corpus import stopwords
 from nltk.collocations import BigramCollocationFinder,TrigramCollocationFinder
 from nltk.metrics import TrigramAssocMeasures ,BigramAssocMeasures
 import matplotlib.pyplot as plt
-import math
+from math import log
 from scipy.special import expit
 from nltk import timex
 from nltk.tag.stanford import StanfordPOSTagger
@@ -40,8 +40,8 @@ ne4=StanfordNERTagger('C:\\Users\\anshmania\\AppData\\Roaming\\nltk_data\\tagger
 #Mongo Database creation.
 client=MongoClient()
 #client.test.drop_collection('chatSessions')
-#
-##Create a dummy chat database
+
+#Create a dummy chat database
 #i=0
 #j=0
 #text=[]
@@ -56,8 +56,8 @@ client=MongoClient()
 #        text=[]
 
 # Read from the GeoIp database
-#city_db=geoip2.database.Reader('C:/Users/anshmania/codes/python/GeoLite2-City.mmdb')
-#country_db=geoip2.database.Reader('C:/Users/anshmania/codes/python/GeoLite2-Country.mmdb')
+city_db=geoip2.database.Reader('C:/Users/anshmania/codes/python/GeoLite2-City.mmdb')
+country_db=geoip2.database.Reader('C:/Users/anshmania/codes/python/GeoLite2-Country.mmdb')
 
 keyWords=['sale','username','password','usr','pass','buy','price','try', 'policy','would', 'new','will','like','purchase','insurance','id']
 keywords1=['haywire','problematic','problem','doesnt work', 'work']
@@ -154,7 +154,7 @@ def keywordFreqAnalyser(conversationId):
         freqDist=nltk.FreqDist(data['text'])
         for i,word  in enumerate(freqDist.iterkeys()):
             if word in keyWords:
-                freqData.setdefault(data['conversationId'],[]).append({word:freqDist[word]})
+                freqData.setdefault(data['conversationId'],[]).append(freqDist[word])
     return freqData[conversationId]
 
 #########################################################################
@@ -198,7 +198,7 @@ def biCollocationFinder(conversationId):
         filter_stops=lambda w: len(w)<3
         bcf = BigramCollocationFinder.from_words(removeStops(conversationId))
         bcf.apply_word_filter(filter_stops)
-        bcf.apply_freq_filter(1) #filter to find collocations appearing atleast twice
+        bcf.apply_freq_filter(2) #filter to find collocations appearing atleast twice
         bi_likelihood=bcf.nbest(BigramAssocMeasures.likelihood_ratio, 3)
     #bi_chi=bcf.nbest(BigramAssocMeasures.chi_sq, 3)
     #bi_fish=bcf.nbest(BigramAssocMeasures.fisher, 3)
@@ -226,13 +226,13 @@ def nonCompliance(conversationId):
 def biCollocationScore(conversationId):
     bi=biCollocationFinder(conversationId)
     [bi_list.append(senti(word)['non-compliance']) for item in bi for word in item]
-    sum_b=math.sqrt(sum(bi_list))                                                                       # a way to normalize these scores???
+    sum_b=sum(bi_list)                    # a way to normalize these scores???
     return sum_b
 
 def triCollocationScore(conversationId):
     tri=triCollocationFinder(conversationId)
     [tri_list.append(senti(word)['non-compliance']) for item in tri for word in item]
-    sum_t=math.sqrt(sum(tri_list))
+    sum_t=sum(tri_list)
     return sum_t
 
 #########################################################################
@@ -243,20 +243,17 @@ WORD_VALENCE_DICT = cnc.make_lex_dict(f)
 def valenceScore(keyword):
     return WORD_VALENCE_DICT[keyword]
 
-def checkWordExistence(keyword):
-    if keyword in WORD_VALENCE_DICT.keys():
-        return True
-    else:
-        return False
-
 def longWordScore(conversationId):
     long_word_score=0
     for word in extractLongWords(conversationId):
-        if checkWordExistence(word)==True:
-            long_word_score += valenceScore(word)
+        if word in WORD_VALENCE_DICT.keys():
+            try:
+                long_word_score += valenceScore(word)
+
+            except None: return 0
         else:
-            continue
-        return long_word_score
+            return 0
+
 #########################################################################
 ########################## Analysis #####################################
 #########################################################################
@@ -283,33 +280,34 @@ bi_list=[]
 tri_list=[]
 # putting all the features together and creating a criticality index
 def featureExtractor(conversationId):
-        keywordsInText=len(keywordFreqAnalyser(conversationId))
-        #sum_feature= 0.5*(keywordsInText)+0.3*(non_comp)+0.2*(biCollocationScore(conversationId)+triCollocationScore(conversationId))
-        sum_feature= 0.2*(keywordsInText)+0.6*nonCompliance(conversationId)+0.2*(biCollocationScore(conversationId)+triCollocationScore(conversationId))
+    keywordScore = sum(keywordFreqAnalyser(conversationId))
+    sum_feature= 0.2*(keywordScore)+0.5*nonCompliance(conversationId)\
+    +0.2*(biCollocationScore(conversationId)+triCollocationScore(conversationId))\
+    +0.1*longWordScore(conversationId)
 #    return logistic._pdf(sum_feature)
-        if sum_feature<0.5:
-            sum_feature -= 1
-            return expit(sum_feature)
-        else:
-            return expit(sum_feature)
+    if sum_feature<0.5:
+        sum_feature -= 1
+        return expit(sum_feature)
+    else:
+        return expit(sum_feature)
 
 ######################################################################
 ## Declare some variables and Prepare for a plot
-#x=[]
-#y=[]
-#for i in range(20):
-##,data in enumerate(client.test.chatSessions.find()):
-#    x.append(featureExtractor(i+1))
-#    y.append(sentimentAnalyser(i+1)[0]['compound'])
-#
-#######################################################################
-### Plot
-#fig=plt.figure()
-#plt.scatter(x, y, alpha=0.5)
-#fig.suptitle('Conversation analysis', fontsize=20)
-#plt.xlabel('Criticality', fontsize=18)
-#plt.ylabel('Sentiment', fontsize=16)
-#plt.show()
+x=[]
+y=[]
+for i in range(10):
+#,data in enumerate(client.test.chatSessions.find()):
+    x.append(featureExtractor(i+15))
+    y.append(sentimentAnalyser(i+15)[0]['compound'])
+
+######################################################################
+## Plot
+fig=plt.figure()
+plt.scatter(x, y, alpha=0.5)
+fig.suptitle('Conversation analysis', fontsize=20)
+plt.xlabel('Criticality', fontsize=18)
+plt.ylabel('Sentiment', fontsize=16)
+plt.show()
 
 #####################################################################
 ################# Elasticsearch Indexing ############################
